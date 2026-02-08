@@ -1,115 +1,103 @@
 import { expect, Locator, Page } from "@playwright/test";
 
 export class Home {
-
     public readonly inputNewTodo: Locator;
-
-    public readonly labelToggleAll: Locator;
-    public readonly listItems: Locator;
-    public readonly individualItem: Locator;
-    public readonly selectIndividualItem: Locator;
-    public readonly deleteIndividualItem: Locator;
-    public readonly editIndividualItem: Locator;
+    public readonly toggleAll: Locator;
+    public readonly todoList: Locator;
+    public readonly todoItems: Locator;
     public readonly todoCount: Locator;
-    public readonly filterActiveElements: Locator;
-    public readonly filterCompletedElements: Locator;
-    public readonly filterAllElements: Locator;
-    public readonly buttonClearCompleted: Locator;
+    public readonly clearCompletedButton: Locator;
 
-    constructor(page: Page) {
-        this.inputNewTodo = page.getByRole('textbox', { name: 'What needs to be done?' });
-        this.labelToggleAll = page.locator('//label[@for="toggle-all"]');
-        this.listItems = page.locator('//ul[@class="todo-list"]');
-        this.individualItem = page.locator('//ul[@class="todo-list"]/li');
-        this.selectIndividualItem = page.locator('//input[@aria-label="Toggle Todo"]');
-        this.deleteIndividualItem = page.locator('//button[@class="destroy"]');
-        this.editIndividualItem = page.locator('//li[@class="editing"]//input[@aria-label="Toggle Todo"]');
-        this.todoCount = page.locator('//span[@class="todo-count"]');
-        this.filterActiveElements = page.locator('//a[text()="Active"]');
-        this.filterCompletedElements = page.locator('//a[text()="Completed"]');
-        this.filterAllElements = page.locator('//a[text()="All"]');
-        this.buttonClearCompleted = page.locator('//button[@class="clear-completed"]');
+    // Filters
+    public readonly filterAll: Locator;
+    public readonly filterActive: Locator;
+    public readonly filterCompleted: Locator;
+
+    constructor(private readonly page: Page) {
+        this.inputNewTodo = page.getByPlaceholder('What needs to be done?');
+        this.toggleAll = page.getByLabel('Mark all as complete');
+        this.todoList = page.locator('ul.todo-list');
+        this.todoItems = page.getByTestId('todo-item');
+        this.todoCount = page.getByTestId('todo-count');
+
+        this.filterAll = page.getByRole('link', { name: 'All' });
+        this.filterActive = page.getByRole('link', { name: 'Active' });
+        this.filterCompleted = page.getByRole('link', { name: 'Completed' });
+
+        this.clearCompletedButton = page.getByRole('button', { name: 'Clear completed' });
     }
 
-    async gotoToHomePage(url: string, page: Page) {
-        await page.goto(url);
-    }
+    // --- Actions ---
 
+    async goto() {
+        await this.page.goto('https://demo.playwright.dev/todomvc/#/');
+    }
 
     async createTodo(text: string) {
         await this.inputNewTodo.fill(text);
         await this.inputNewTodo.press('Enter');
     }
 
-    async clearCompleted() {
-        await this.buttonClearCompleted.click();
-    }
-
-    async markAItemOfItemListAsCompleted(nthItemTodo: number) {
-        await this.selectIndividualItem.nth(nthItemTodo).click();
-    }
-
-    async markAIndividualItemAsCompleted() {
-        await this.selectIndividualItem.click();
-    }
-
-
-    async createMultipleTodoItems(getName: () => string, numberItems: number) {
-        for (let i = 0; i < numberItems; i++) {
-            await this.createTodo(getName());
+    async createMultipleTodos(generateName: () => string, count: number) {
+        for (let i = 0; i < count; i++) {
+            await this.createTodo(generateName());
         }
     }
 
-    async deleteAItemTodoList() {
-        const item = this.individualItem.first();
+    async toggleAllCompleted() {
+        await this.toggleAll.check();
+    }
+
+    async completeItem(index: number = 0) {
+        await this.todoItems.nth(index).getByRole('checkbox').check();
+    }
+
+    async uncompleteItem(index: number = 0) {
+        await this.todoItems.nth(index).getByRole('checkbox').uncheck();
+    }
+
+    async deleteItem(index: number = 0) {
+        const item = this.todoItems.nth(index);
         await item.hover();
-        await item.locator(this.deleteIndividualItem).click();
+        await item.getByRole('button', { name: 'Delete' }).click();
     }
 
-    async selectedFilterActive() {
-        await this.filterActiveElements.click();
+    async applyFilter(filter: 'All' | 'Active' | 'Completed') {
+        const filterLocators = {
+            'All': this.filterAll,
+            'Active': this.filterActive,
+            'Completed': this.filterCompleted
+        };
+        await filterLocators[filter].click();
     }
 
-    async selectedFilterCompleted() {
-        await this.filterCompletedElements.click();
+    async clearCompletedTodos() {
+        await this.clearCompletedButton.click();
     }
 
-    async selectedFilterAll() {
-        await this.filterAllElements.click();
+    // --- Assertions ---
+
+    async verifyItemsCount(expectedCount: number) {
+        await expect(this.todoItems).toHaveCount(expectedCount);
     }
 
-    async verifyItemsFilter(itemsFilter: number) {
-        await expect(this.individualItem).toHaveCount(itemsFilter);
+    async verifyTodoCountLabel(expectedText: string) {
+        // expectedText like "3 items left" or "0 items left"
+        await expect(this.todoCount).toHaveText(expectedText);
     }
 
-    async verifyItemTodoCreated(name: string, numberItems: number) {
-        await expect(this.individualItem).toBeVisible();
-        await expect(this.individualItem).toHaveText(name);
-        await expect(this.individualItem).not.toHaveClass('completed');
-        await this.verifyAddItemTodo(numberItems)
+    async verifyItemContent(index: number, expectedText: string) {
+        await expect(this.todoItems.nth(index)).toHaveText(expectedText);
     }
 
-    async verifyItemsTodoCreated(numberItems: number) {
-        const items = await this.individualItem.all();
-        console.log(items);
+    async verifyAllItemsAreActive() {
+        const items = await this.todoItems.all();
         for (const item of items) {
-            await expect(item).toBeVisible();
-            await expect(item).not.toHaveClass('completed');
+            await expect(item).not.toHaveClass(/completed/);
         }
-        await this.verifyAddItemsTodo(numberItems);
     }
 
-    async verifyAddItemsTodo(count: number) {
-        await expect(this.todoCount).toHaveText(`${count} items left`);
-    }
-
-    async verifyAddItemTodo(count: number) {
-        await expect(this.todoCount).toHaveText(`${count} item left`);
-    }
-
-
-    async verfifyClearCompleted() {
-        await expect(this.listItems).not.toBeVisible();
-        await expect(this.inputNewTodo).toBeVisible();
+    async verifyListIsEmpty() {
+        await expect(this.todoList).not.toBeVisible();
     }
 }
